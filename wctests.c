@@ -66,7 +66,7 @@ TestObjs *setup(void) {
 
   objs->test_str_1 = (const unsigned char *) "hello";
   objs->test_str_2 = (const unsigned char *) "This is A SeNtEnCe with_MiXeD cASe.";
-  objs->test_str_3 = (const unsigned char *) "O_O...";
+  objs->test_str_3 = (const unsigned char *) "...";
   objs->test_str_4 = (const unsigned char *) "hello, world";
 
   objs->test_str_1_copy = (const unsigned char *) "hello";
@@ -197,9 +197,10 @@ void test_trim_non_alpha(TestObjs *objs) {
   unsigned char buf[256];
 
   strcpy((char *) buf, (const char *) objs->test_str_3);
-  ASSERT(0 == strcmp("O_O...", (const char *) buf));
+  ASSERT(0 == strcmp("...", (const char *) buf));
   wc_trim_non_alpha(buf);
-  ASSERT(0 == strcmp("O_O", (const char *) buf));
+  ASSERT(0 == strcmp("", (const char *) buf));
+  
 }
 
 void test_find_or_insert(TestObjs *objs) {

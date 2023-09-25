@@ -114,7 +114,7 @@ int wc_readnext(FILE *in, unsigned char *w) {
     } while (wc_isspace(c));
 
     // Read the word
-    while (!wc_isspace((unsigned char)c) && word - w < MAX_WORDLEN) {
+    while (!wc_isspace((unsigned char)c) && word - w <= MAX_WORDLEN) {
         *word++ = (unsigned char)c;
         c = fgetc(in);
         if (c == EOF) {
@@ -125,7 +125,6 @@ int wc_readnext(FILE *in, unsigned char *w) {
     }
     *word = '\0';  
     while (!wc_isspace((unsigned char)c) && c != EOF) c = fgetc(in);
-
     return 1;
 }
 
@@ -144,9 +143,11 @@ void wc_tolower(unsigned char *w) {
 // NUL-terminated character string pointed-to by w.
 void wc_trim_non_alpha(unsigned char *w) {
   // TODO: implement
-  while (*w != '\0') w++;
-  while (!wc_isalpha(*w)) w--; 
-  *++w = '\0';
+  int len = 0;
+  while (w[len] != '\0') len++;
+  while (!wc_isalpha(w[len-1]) && len > 0) len--; 
+  // if (w == word && wc_isalpha(*word))
+  w[len] = '\0';
 }
 
 // Search the specified linked list of WordEntry objects for an object
@@ -171,7 +172,7 @@ struct WordEntry *wc_find_or_insert(struct WordEntry *head, const unsigned char 
             *inserted = 0;
             return curr;
       }
-  curr = curr->next;
+    curr = curr->next;
   } 
   struct WordEntry *newEntry = (struct WordEntry *)malloc(sizeof(struct WordEntry));
   wc_str_copy((unsigned char *)newEntry->word, s);

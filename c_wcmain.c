@@ -15,21 +15,21 @@ int main(int argc, char **argv) {
   const unsigned char *best_word = (const unsigned char *) "";
   uint32_t best_word_count = 0;
 
-  // TODO: implement
+  FILE *file;
 
-//   while ( next word is read successfully using wc_readnext ) {
-//   increase total word count by 1
+  if (argc < 2) {
+         file = stdin; 
+    }else if (argc == 2) {
+      file = fopen(argv[1], "r");
+    } else {
+      fprintf(stderr, "Error: File not specified.\n");
+    }
 
-//   use wc_tolower to convert word to lower case
+    if (!file) {
+        fprintf(stderr, "Error: Cannot open file '%s'.\n", argv[1]);
+        return 2;  
+    }
 
-//   use wc_trim_non_alpha to remove non-alphabetic characters at end of word
-
-//   use wc_dict_find_or_insert to find or insert the word in the hash table
-
-//   increment the WordEntry's count
-// }
-
-  FILE *file = fopen(argv[1], "r");
   struct WordEntry *hashTable[HASHTABLE_SIZE] = {NULL};
   unsigned char word[MAX_WORDLEN + 1];
   while (wc_readnext(file, word)) {
@@ -37,8 +37,9 @@ int main(int argc, char **argv) {
     wc_tolower(word);
     wc_trim_non_alpha(word);
     wc_dict_find_or_insert(hashTable, HASHTABLE_SIZE, word) -> count++;
+    
   }
-  
+
   struct WordEntry *curr;
   for (int i = 0; i < HASHTABLE_SIZE; i++){
     if (hashTable[i]){
@@ -48,6 +49,8 @@ int main(int argc, char **argv) {
         if (curr->count > best_word_count) {
           best_word_count = curr->count;
           best_word = curr->word;
+        } else if (curr->count == best_word_count) {
+          best_word = wc_str_compare(curr->word, best_word) < 0 ? curr->word : best_word;
         }
         curr = curr->next;
       }
