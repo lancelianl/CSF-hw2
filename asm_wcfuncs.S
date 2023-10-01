@@ -13,10 +13,10 @@
 #define WORDENTRY_COUNT_OFFSET  (MAX_WORDLEN+1)
 #define WORDENTRY_NEXT_OFFSET   (MAX_WORDLEN+1+4+4)
 
-	.section .rodata
+ .section .rodata
 /* Define any string constants or read-only data here */
 
-	.section .text
+ .section .text
 
 /*
  * Compute a hash code for the given NUL-terminated
@@ -35,10 +35,10 @@
  * C function prototype:
  *    uint32_t wc_hash(const unsigned char *w);
  */
-	.globl wc_hash
+ .globl wc_hash
 wc_hash:
-	/* TODO: implement */
-	ret
+ /* TODO: implement */
+ ret
 
 /*
  * Compare two strings lexicographically. Return
@@ -55,10 +55,33 @@ wc_hash:
  * C function prototype:
  *    int wc_str_compare(const unsigned char *lhs, const unsigned char *rhs);
  */
-	.globl wc_str_compare
+ .globl wc_str_compare
 wc_str_compare:
-	/* TODO: implement */
-	ret
+ /* %rdi represents *lhs, %rsi represents *rhs */
+.compareLoop:
+ movzbl (%rdi), %edx /* copy data in %rdi to %edx */
+ movzbl (%rsi), %ecx /* copy data in %rdi to %ecx */
+ cmpl %ecx, %edx /* compare char one by one */
+ jl .lhsLess /* jump if %edx < %ecx */
+ jg .lhsGreater /* jump if %edx > %exc */
+ /* if we reach here, the strings are identical so far */
+ cmpl $0x00, %edx /* if both chars are equal to the null terminator, the strings are identical */
+ je .equal
+ incq %rdi /* go to the next char */
+ incq %rsi
+ jmp .compareLoop /* restart the loop */
+
+.lhsLess:
+ movl $-1, %eax /* return a negative value */
+ ret
+
+.lhsGreater:
+ movl $1, %eax /* return a positive value */
+ ret
+
+.equal:
+ movl $0, %eax /* return 0 */
+ ret
 
 /*
  * Copy NUL-terminated source string to the destination buffer.
@@ -66,10 +89,10 @@ wc_str_compare:
  * C function prototype:
  *    void wc_str_copy(unsigned char *dest, const unsigned char *source);
  */
-	.globl wc_str_copy
+ .globl wc_str_copy
 wc_str_copy:
-	/* TODO: implement */
-	ret
+ /* TODO: implement */
+ ret
 
 /*
  * Return 1 if the character code in c is a whitespace character,
@@ -87,10 +110,34 @@ wc_str_copy:
  * C function prototype:
  *    int wc_isspace(unsigned char c);
  */
-	.globl wc_isspace
+ .globl wc_isspace
 wc_isspace:
-	/* TODO: implement */
-	ret
+ /* check if %dil (last 8 bits of %rdi) is space */
+ cmpb $0x20, %dil /* check if ' ' */
+ je .isspace
+
+ cmpb $0x09, %dil /* check if '\t' */
+ je .isspace
+
+ cmpb $0x0d, %dil /* check if '\r' */
+ je .isspace
+
+ cmpb $0x0a, %dil /* check if '\n' */
+ je .isspace
+
+ cmpb $0x0c, %dil /* check if '\f' */
+ je .isspace
+
+ cmpb $0x0b, %dil /* check if '\v' */
+ je .isspace
+
+ /* if not space, return 0 */
+ movl $0, %eax
+ ret
+
+.isspace:
+ movl $1, %eax
+ ret
 
 /*
  * Return 1 if the character code in c is an alphabetic character
@@ -99,10 +146,34 @@ wc_isspace:
  * C function prototype:
  *    int wc_isalpha(unsigned char c);
  */
-	.globl wc_isalpha
+ .globl wc_isalpha
 wc_isalpha:
-	/* TODO: implement */
-	ret
+ /* check if between 'A' and 'Z' */
+ cmpb $0x41, %dil /* check if c is less than 'A' */
+ jl .notAtoZ
+
+ cmpb $0x5A, %dil /* check if c is greater than 'Z' */
+ jg .notAtoZ
+
+ /* if we reach here, c is between 'A' and 'Z' */
+ movl $1, %eax
+ ret
+
+.notAtoZ:
+ /* check if between 'a' and 'z' */
+ cmpb $0x61, %dil /* check if c is less than 'a' */
+ jl .notAlpha
+
+ cmpb $0x7A, %dil /* check if c is greater than 'z' */
+ jg .notAlpha
+
+ /* if we reach here, c is between 'a' and 'z' */
+ movl $1, %eax
+ ret
+
+.notAlpha:
+ movl $0, %eax
+ ret
 
 /*
  * Read the next word from given input stream, storing
@@ -120,10 +191,10 @@ wc_isalpha:
  * C function prototype:
  *    int wc_readnext(FILE *in, unsigned char *w);
  */
-	.globl wc_readnext
+ .globl wc_readnext
 wc_readnext:
-	/* TODO: implement */
-	ret
+ /* TODO: implement */
+ ret
 
 /*
  * Convert the NUL-terminated character string in the array
@@ -132,10 +203,10 @@ wc_readnext:
  * C function prototype:
  *    void wc_tolower(unsigned char *w);
  */
-	.globl wc_tolower
+ .globl wc_tolower
 wc_tolower:
-	/* TODO: implement */
-	ret
+ /* TODO: implement */
+ ret
 
 /*
  * Remove any non-alphaabetic characters from the end of the
@@ -144,10 +215,10 @@ wc_tolower:
  * C function prototype:
  *    void wc_trim_non_alpha(unsigned char *w);
  */
-	.globl wc_trim_non_alpha
+ .globl wc_trim_non_alpha
 wc_trim_non_alpha:
-	/* TODO: implement */
-	ret
+ /* TODO: implement */
+ ret
 
 /*
  * Search the specified linked list of WordEntry objects for an object
@@ -166,10 +237,10 @@ wc_trim_non_alpha:
  * C function prototype:
  *    struct WordEntry *wc_find_or_insert(struct WordEntry *head, const unsigned char *s, int *inserted);
  */
-	.globl wc_find_or_insert
+ .globl wc_find_or_insert
 wc_find_or_insert:
-	/* TODO: implement */
-	ret
+ /* TODO: implement */
+ ret
 
 /*
  * Find or insert the WordEntry object for the given string (s), returning
@@ -183,10 +254,10 @@ wc_find_or_insert:
  * C function prototype:
  *    struct WordEntry *wc_dict_find_or_insert(struct WordEntry *buckets[], unsigned num_buckets, const unsigned char *s);
  */
-	.globl wc_dict_find_or_insert
+ .globl wc_dict_find_or_insert
 wc_dict_find_or_insert:
-	/* TODO: implement */
-	ret
+ /* TODO: implement */
+ ret
 
 /*
  * Free all of the nodes in given linked list of WordEntry objects.
@@ -194,10 +265,10 @@ wc_dict_find_or_insert:
  * C function prototype:
  *    void wc_free_chain(struct WordEntry *p);
  */
-	.globl wc_free_chain
+ .globl wc_free_chain
 wc_free_chain:
-	/* TODO: implement */
-	ret
+ /* TODO: implement */
+ ret
 
 /*
 vim:ft=gas:
