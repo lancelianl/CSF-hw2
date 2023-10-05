@@ -15,11 +15,11 @@
 #defind MAX_WORDLEN (63) 
  .section .rodata
 /* Define any string constants or read-only data here */
-
+/*
 printFormat: .string "%u"
 badFile: .string "bad input file indicator"
 inputString: .string "%c"
-
+*/
 .section .bss
 buffer:
     .space 1  # Allocate space for a single character
@@ -247,7 +247,7 @@ movq %rsp, %rbp
 pushq %r12
 pushq %r13
 pushq %r14
-pushq %rcx //place holder to align stack
+pushq %r15 
 
 	movq %rdi, %r12 #save the file pointer in r12
     movq %rsi, %r13 #save the word pointer in r13
@@ -256,65 +256,67 @@ pushq %rcx //place holder to align stack
 .read_forward_space_loop:
     # Set up arguments for fscanf
     	movq %r12, %rdi 
-    	leaq inputString(%rip), %rsi  # Address of the format specifier
-    	leaq buffer(%rip), %rdx  # Address of the buffer
-    # Call fscanf
-    	call fscanf
+        call fgetc
+
+	movsxd %eax, %rax
 
     # Check the result of fscanf
-    	cmpq $1, %rax  # Check if fscanf read one item
-    	jne .error_read     # If not, jump to error handling
+    	cmpq $-1, %rax  # Check if fscanf read one item
+    	je .error_read     # If not, jump to error handling
+	movq %rax, %r15  #for the buffer	
 
  # Check if character is whitespace
-    	movzbl buffer(%rip), %edi       # Load the read byte into %edi
+    	movzbl %r15b, %edi       # Load the read byte into %edi
     	call wc_isspace      
     	cmpl $1, %eax
     	je .read_forward_space_loop
 
 .read_char_loop:
-	movzbl buffer(%rip), %eax          # Load the read byte into %eax
-	movb %al, (%r13, %r14)   # Store the byte in buffer
+
+	movb %r15b, (%r13, %r14)   # Store the byte in buffer
 	incq %r14
 
 	cmpl $MAX_WORDLEN, %r14d
 	jae .overflow_loop
 
 	movq %r12, %rdi
-        leaq inputString(%rip), %rsi  # Address of the format specifier
-        leaq buffer(%rip), %rdx  # Address of the buffer
-	call fscanf
-	
-	cmpq $1, %rax  # Check if fscanf read one item
-	jne .read_end
+        call fgetc
+        
+	movsxd %eax, %rax 
+	cmpq $-1, %rax  # Check if fscanf read one item
+	je .read_end
 
-	movzbl buffer(%rip), %edi       # Load the read byte into %eax
+	movq %rax, %r15
+	movzbl %r15b, %edi       # Load the read byte into %eax
         call wc_isspace
         cmpl $1, %eax
         je .read_end
-
-	movzbl buffer(%rip), %eax          # Load the read byte into %al
+	
 	jmp .read_char_loop
 	
 .overflow_loop:
 	movq %r12, %rdi
-        leaq inputString(%rip), %rsi  # Address of the format specifier
-        leaq buffer(%rip), %rdx  # Address of the buffer
-        call fscanf
+	call fgetc
 
-	cmpq $1, %rax  # Check if fscanf read one item
-        jne .read_end
+	movsxd %eax, %rax
 
-	movzbl buffer(%rip), %edi       # Load the read byte into %eax
+	cmpq $-1, %rax  # Check if fscanf read one item
+        je .read_end
+	movq %rax, %r15
+
+	movzbl %r15b, %edi       # Load the read byte into %eax
         call wc_isspace
         cmpl $1, %eax
         je .read_end
+
+	jmp .overflow_loop
 
 .read_end:
     # Null-terminate the buffer
     movb $0, (%r13, %r14)    # Store null terminator in buffer
     movl $1, %eax
        # Epilogue
-popq %rcx
+popq %r15
 popq %r14
 	popq %r13
 	popq %r12
@@ -323,7 +325,7 @@ popq %r14
 
 .error_read: 
     movl $0, %eax
-popq %rcx
+popq %r15
 popq %r14
         popq %r13
         popq %r12
@@ -423,9 +425,59 @@ popq %rbp
  * C function prototype:
  *    struct WordEntry *wc_find_or_insert(struct WordEntry *head, const unsigned char *s, int *inserted);
  */
- .globl wc_find_or_insert
+
+.globl wc_find_or_insert
 wc_find_or_insert:
  /* TODO: implement */
+ /* %rdi: *head, %rsi: *s, %rdx: *inserted */
+ subq $8, %rsp /* stack alignment */
+ /* save arguments for later retrievement */
+ pushq %r12
+ pushq %r13
+ pushq %rdx
+ movq %rdi, %r12
+ movq %rsi, %r13
+
+.Lfind_or_insert_loop:
+ cmpq $0, %rdi /* check if we reach the end of the linked list */
+ je .Lfind_or_insert_not_found
+ movq %r13, %rsi /* retrieve %rsi */
+ pushq %rdi /* save %rdi */
+ call wc_str_compare /* check if %rdi (current word in the linked list) and %rsi (target string) are the same */
+ popq %rdi /* retreive %rdi */
+ je .Lfind_or_insert_found
+ movq WORDENTRY_NEXT_OFFSET(%rdi), %rdi /* move to the next WordEntry object */
+ jmp .Lfind_or_insert_loop
+
+.Lfind_or_insert_not_found:
+ /* object not found */
+ /* number of byte to allocate: WORDENTRY_NEXT_OFFSET + 8 */
+ movq $WORDENTRY_NEXT_OFFSET, %rdi
+ addq $8, %rdi
+ subq $8, %rsp /* stack alignment */
+ call malloc /* now %rax stores the address of the newly allocated object */
+ movq %rax, %rdi /* %rax as the destination of str_copy */
+ movq %r13, %rsi /* retrieve %rsi */
+ call wc_str_copy /* word = *s */
+ addq $8, %rsp /* stack alignment */
+ movq $0, WORDENTRY_COUNT_OFFSET(%rdi) /* count = 0 */
+ movq %r12, WORDENTRY_NEXT_OFFSET(%rdi) /* next = head */
+ movq %rdi, %rax /* return the modified WordEntry */
+ popq %rdx /* retrieve %rdx *inserted */
+ movq $1, (%rdx) /* *inserted = 1 */
+ popq %r13
+ popq %r12
+ addq $8, %rsp /* stack alignment */
+ ret
+
+.Lfind_or_insert_found:
+ /* object found */
+ popq %rdx /* retrieve %rdx *inserted */
+ movq $0, (%rdx) /* *inserted = 0 */
+ movq %rdi, %rax /* return the address of the matching object */
+ popq %r13
+ popq %r12
+ addq $8, %rsp /* stack alignment */
  ret
 
 /*
@@ -440,10 +492,59 @@ wc_find_or_insert:
  * C function prototype:
  *    struct WordEntry *wc_dict_find_or_insert(struct WordEntry *buckets[], unsigned num_buckets, const unsigned char *s);
  */
+
  .globl wc_dict_find_or_insert
 wc_dict_find_or_insert:
  /* TODO: implement */
+ /* %rdi: *buckets[], %rsi: num_buckets, %rdx: *s */
+
+ /* save arguments for later retrievement */
+ pushq %r12
+ pushq %r13
+ pushq %r14
+ pushq %r15
+ movq %rdi, %r12
+ movq %rsi, %r13
+ movq %rdx, %r14
+ /* allocate an address for inserted */
+ movq $8, %rdi 
+ subq $8, %rsp /* stack alignment */
+ call malloc
+ addq $8, %rsp /* stack alignment */
+ movq %rax, %r15
+
+ movq %r14, %rdi /* compute hashcode of *s */
+ call wc_hash /* rax now stores dividend (hashcode) */
+
+ xorq %rdx, %rdx /* clear %rdx, ensuring that we're working with a 64-bit dividend */
+ movq %r13, %rcx /* load divider (num_buckets) into %rcx */
+ idivq %rcx /* perform division, %rdx now stores the remainder */
+
+ pushq %rdx /* save %rdx */
+ movq (%r12, %rdx, 8), %rdi /* load buckets[hashIndex] to %rdi */
+ movq %r14, %rsi /* load s to %rsi */
+ movq %r15, %rdx /* load &inserted to rdx */
+ call wc_find_or_insert /* %rax now stores newEntry */
+
+ cmpq $1, (%rdx) /* check if inserted */
+ je .Ldict_find_or_insert_inserted
+ popq %rdx /* stack alignment */
+ popq %r15
+ popq %r14
+ popq %r13
+ popq %r12
  ret
+
+.Ldict_find_or_insert_inserted:
+ /* retrieve %rdx and %rdi */
+ popq %rdx /* retrieve %rdx */
+ movq %rax, (%r12, %rdx, 8) /* buckets[hashIndex] = newEntry */
+ popq %r15
+ popq %r14
+ popq %r13
+ popq %r12
+ ret
+
 
 /*
  * Free all of the nodes in given linked list of WordEntry objects.
@@ -453,7 +554,19 @@ wc_dict_find_or_insert:
  */
  .globl wc_free_chain
 wc_free_chain:
- /* TODO: implement */
+ movl $0, %eax
+ pushq %r12 /* stack alignment */
+
+.freeLoop:
+ cmpq $0, %rdi /* check if we reach the end of the chain */
+ je .endOfChain
+ movq WORDENTRY_NEXT_OFFSET(%rdi), %r12 /* store the address of next WordEntry object in callee-saved register %r12 */
+ call free /* free %rdi */
+ movq %r12, %rdi /* move to the next WordEntry object */
+ jmp .freeLoop
+
+.endOfChain:
+ popq %r12 /* stack alignment */
  ret
 
 /*

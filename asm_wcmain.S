@@ -9,7 +9,7 @@
 	printFormat: .string "%s"
 	intFormat: .string "%d"	
 	readFile: .string "r"
-	fileSpecify: .string "Error: File not specified.\n"
+	fileSpecify: .string "Error: file not specified.\n"
 	fileCannotOpen: .string "Error: Cannot open file.\n"	
 	debug: .string "debug"
 	
@@ -44,7 +44,8 @@ main:
 	
 	cmpl $0, %eax
 	je .file_cannot_open
-	
+
+
 	movq %rax, %r14 #r14 for the file indicator
 
 .init_hashtable:
@@ -61,8 +62,9 @@ main:
 	jmp .zero_loop               # repeat until ECX is 0
 	
 .read_word_loop:
-	movq %r13, %rdi  	#copy the input file indicator
+	movq %r14, %rdi  	#copy the input file indicator
 	leaq word, %rsi		#copy the word string pointer
+	
 	call wc_readnext
 	
 	cmpl $0, %eax  		#read done, start calculate statistics
@@ -75,10 +77,14 @@ main:
 
 	leaq word, %rdi
 	call wc_trim_non_alpha
+ 	
+	// TODO: call the dist insert
 	
 	jmp .read_word_loop
 
 .compute_statistics:
+	//TODO: go over the hashtable and calculate the most common word
+
 	movq $debug, %rdi
 	call printf
 	jmp .ending	
