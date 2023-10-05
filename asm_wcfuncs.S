@@ -12,9 +12,17 @@
 #define WORDENTRY_WORD_OFFSET   (0)
 #define WORDENTRY_COUNT_OFFSET  (MAX_WORDLEN+1)
 #define WORDENTRY_NEXT_OFFSET   (MAX_WORDLEN+1+4+4)
-
+#defind MAX_WORDLEN (63) 
  .section .rodata
 /* Define any string constants or read-only data here */
+
+printFormat: .string "%u"
+badFile: .string "bad input file indicator"
+inputString: .string "%c"
+
+.section .bss
+buffer:
+    .space 1  # Allocate space for a single character
 
  .section .text
 
@@ -37,8 +45,27 @@
  */
  .globl wc_hash
 wc_hash:
- /* TODO: implement */
- ret
+pushq %rbp
+movq %rsp, %rbp
+
+movl $5381, %eax //set hashcode to 5381
+movq %rdi, %rcx //pointer for the string
+movl $33, %r10d //store the constant 33 for future use
+
+.hashcode_loop:
+movzbl (%rcx), %r11d // get the char into %r11d
+cmpb $0, %r11b // check for the null terminator
+je .done_hashcode_loop
+
+mull %r10d //calculate the new hashcode and store in eax
+addl %r11d, %eax
+
+incq %rcx
+jmp .hashcode_loop
+
+.done_hashcode_loop:
+popq %rbp
+ret
 
 /*
  * Compare two strings lexicographically. Return
@@ -84,22 +111,41 @@ wc_str_compare:
  ret
 
 /*
- * Copy NUL-terminated source string to the destination buffer.
+ * Copy NULterminated source string to the destination buffer.
  *
  * C function prototype:
  *    void wc_str_copy(unsigned char *dest, const unsigned char *source);
  */
  .globl wc_str_copy
 wc_str_copy:
- /* TODO: implement */
- ret
+push %rbp
+movq %rsp, %rbp
+
+movq %rdi, %rax // rax for the destintaion
+movq %rsi, %rcx // rcs for the source
+
+.copy_loop:
+movzbl (%rcx), %edx // use dl as a temp variable to copy value, since we cannot operate two address.  
+movb %dl, (%rax)
+
+cmpb $0, %dl // check for the null terminator
+je .done_copy
+
+incq %rax
+incq %rcx // increment the address for source and destination
+jmp .copy_loop
+ 
+.done_copy:
+pop %rbp
+ret
+
 
 /*
  * Return 1 if the character code in c is a whitespace character,
  * false otherwise.
  *
  * For the purposes of this function, a whitespace character is one of
- *
+ * 
  *   ' '
  *   '\t'
  *   '\r'
@@ -110,6 +156,7 @@ wc_str_copy:
  * C function prototype:
  *    int wc_isspace(unsigned char c);
  */
+
  .globl wc_isspace
 wc_isspace:
  /* check if %dil (last 8 bits of %rdi) is space */
@@ -169,10 +216,12 @@ wc_isalpha:
 
  /* if we reach here, c is between 'a' and 'z' */
  movl $1, %eax
+//addq $8, %rsp
  ret
 
 .notAlpha:
  movl $0, %eax
+//addq $8, %rsp
  ret
 
 /*
@@ -193,9 +242,93 @@ wc_isalpha:
  */
  .globl wc_readnext
 wc_readnext:
- /* TODO: implement */
- ret
+pushq %rbp
+movq %rsp, %rbp
+pushq %r12
+pushq %r13
+pushq %r14
+pushq %rcx //place holder to align stack
 
+	movq %rdi, %r12 #save the file pointer in r12
+    movq %rsi, %r13 #save the word pointer in r13
+    xorq %r14, %r14
+
+.read_forward_space_loop:
+    # Set up arguments for fscanf
+    	movq %r12, %rdi 
+    	leaq inputString(%rip), %rsi  # Address of the format specifier
+    	leaq buffer(%rip), %rdx  # Address of the buffer
+    # Call fscanf
+    	call fscanf
+
+    # Check the result of fscanf
+    	cmpq $1, %rax  # Check if fscanf read one item
+    	jne .error_read     # If not, jump to error handling
+
+ # Check if character is whitespace
+    	movzbl buffer(%rip), %edi       # Load the read byte into %edi
+    	call wc_isspace      
+    	cmpl $1, %eax
+    	je .read_forward_space_loop
+
+.read_char_loop:
+	movzbl buffer(%rip), %eax          # Load the read byte into %eax
+	movb %al, (%r13, %r14)   # Store the byte in buffer
+	incq %r14
+
+	cmpl $MAX_WORDLEN, %r14d
+	jae .overflow_loop
+
+	movq %r12, %rdi
+        leaq inputString(%rip), %rsi  # Address of the format specifier
+        leaq buffer(%rip), %rdx  # Address of the buffer
+	call fscanf
+	
+	cmpq $1, %rax  # Check if fscanf read one item
+	jne .read_end
+
+	movzbl buffer(%rip), %edi       # Load the read byte into %eax
+        call wc_isspace
+        cmpl $1, %eax
+        je .read_end
+
+	movzbl buffer(%rip), %eax          # Load the read byte into %al
+	jmp .read_char_loop
+	
+.overflow_loop:
+	movq %r12, %rdi
+        leaq inputString(%rip), %rsi  # Address of the format specifier
+        leaq buffer(%rip), %rdx  # Address of the buffer
+        call fscanf
+
+	cmpq $1, %rax  # Check if fscanf read one item
+        jne .read_end
+
+	movzbl buffer(%rip), %edi       # Load the read byte into %eax
+        call wc_isspace
+        cmpl $1, %eax
+        je .read_end
+
+.read_end:
+    # Null-terminate the buffer
+    movb $0, (%r13, %r14)    # Store null terminator in buffer
+    movl $1, %eax
+       # Epilogue
+popq %rcx
+popq %r14
+	popq %r13
+	popq %r12
+    popq %rbp
+    ret
+
+.error_read: 
+    movl $0, %eax
+popq %rcx
+popq %r14
+        popq %r13
+        popq %r12
+	popq %rbp
+	ret
 /*
  * Convert the NUL-terminated character string in the array
  * pointed-to by w so that every letter is lower-case.
@@ -205,7 +338,32 @@ wc_readnext:
  */
  .globl wc_tolower
 wc_tolower:
- /* TODO: implement */
+ push %rbp
+movq %rsp, %rbp
+
+movq %rdi, %r10 // use r10 for the string address
+
+.to_lower_loop:
+movzbl (%r10), %eax // put the current char in al
+cmpb $0, %al //check for null terminator
+je .lower_loop_done
+
+cmpb $'A', %al //check for upper case
+jl .lower_iteration_end
+cmpb $'Z', %al
+jg .lower_iteration_end
+
+subb $'A', %al  //convert the upper to lower
+addb $'a', %al
+movb %al, (%r10)
+jmp .lower_iteration_end
+
+.lower_iteration_end:
+incq %r10
+jmp .to_lower_loop
+
+.lower_loop_done:
+popq %rbp
  ret
 
 /*
@@ -217,7 +375,35 @@ wc_tolower:
  */
  .globl wc_trim_non_alpha
 wc_trim_non_alpha:
- /* TODO: implement */
+  push %rbp
+movq %rsp, %rbp
+
+movq %rdi, %r10 //use r10 for the moving pointer 
+movq %rdi, %r11 //use r11 for the original address of string
+.trim_forward_loop: //traverse to the null terminator
+movzbl (%r10), %eax
+cmpb $0, %al
+je .trim_backward_loop
+
+incq %r10
+jmp .trim_forward_loop
+
+.trim_backward_loop: //trace back from \0
+cmpq %r11, %r10  //cannot search the address before the string (undefined behavior)
+jl .backward_loop_done
+
+movzbl (%r10), %edi //set the first argument of is_alpha
+call wc_isalpha
+cmpl $1, %eax // if the character is alpha
+je .backward_loop_done
+
+decq %r10
+jmp .trim_backward_loop
+
+.backward_loop_done:
+incq %r10 //restore the r10 value to non-alpha
+movb $0, (%r10)
+popq %rbp
  ret
 
 /*
