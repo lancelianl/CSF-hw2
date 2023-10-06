@@ -5,8 +5,15 @@
 #define MAX_WORDLEN 63
 #define HASHTABLE_SIZE 13249
 
+#define WORDENTRY_WORD_OFFSET   (0)
+#define WORDENTRY_COUNT_OFFSET  (MAX_WORDLEN+1)
+#define WORDENTRY_NEXT_OFFSET   (MAX_WORDLEN+1+4+4)
+
 .section .rodata
-	printFormat: .string "%s"
+	printWords: .string "Total words read: %u\n"
+	printUniqueWords: .string "Unique words read: %u\n"
+	printBestWord: .string "Most frequent word: %s (%u)\n"
+	printString: .string "%s"
 	intFormat: .string "%d"	
 	readFile: .string "r"
 	fileSpecify: .string "Error: file not specified.\n"
@@ -17,7 +24,7 @@
 	hashTable:
     		.skip HASHTABLE_SIZE*8  # reserve space for HASHTABLE_SIZE pointers
 	word:
-		.space MAX_WORDLEN + 1 # allocate space for word string=
+		.space 8 # allocate space for word string=
 
 	.section .text
 
@@ -27,8 +34,9 @@ main:
 	movq %rsp, %rbp
 
 	pushq %r12
-        pushq %r13
+    pushq %r13
 	pushq %r14
+	pushq %r15
 
 	movq %rdi, %r12 # for argc
 	movq 8(%rsi), %r13 # for input file argv[1]
@@ -45,13 +53,12 @@ main:
 	cmpl $0, %eax
 	je .file_cannot_open
 
-
 	movq %rax, %r14 #r14 for the file indicator
 
 .init_hashtable:
 	xorq %r12, %r12         #r12 is not used, make it the total word
 	movl $HASHTABLE_SIZE, %ecx  # set loop counter
-	leal hashTable, %edi         # load address of hashTable into EDI
+	leaq hashTable, %rdi         # load address of hashTable into %rdi
 
 .zero_loop:
 	cmpl $0, %ecx 		#if the counter is 0
@@ -68,9 +75,9 @@ main:
 	call wc_readnext
 	
 	cmpl $0, %eax  		#read done, start calculate statistics
-	je .compute_statistics
+	je .compute_prep
 
-	incq %r12 		#increase the total word counter
+	incq %r12 	# %r12 stores the total_words counter
 	
 	leaq word, %rdi
 	call wc_tolower
@@ -78,21 +85,71 @@ main:
 	leaq word, %rdi
 	call wc_trim_non_alpha
  	
-	// TODO: call the dist insert
-	
+	# load argumnents to perfornm wc_dict_find_or_insert(hashTable, HASHTABLE_SIZE, word)
+	leaq hashTable, %rdi
+	movq $HASHTABLE_SIZE, %rsi
+	leaq word, %rdx
+	call wc_dict_find_or_insert
+	incq WORDENTRY_COUNT_OFFSET(%rax) # count++
+
 	jmp .read_word_loop
 
-.compute_statistics:
-	//TODO: go over the hashtable and calculate the most common word
+.compute_prep:
+	# close the file
+	movq %r14, %rdi 
+	call fclose
 
-	movq $debug, %rdi
+	movq $0, %r13 # %r13 stores unique_words counter
+	movq $0, %r14 # %r14 stores the best_word_count counter
+
+	movq $0, %r10 # %r10 as the index
+	leaq hashTable, %rcx # %rcx as the address of the start of hashTable
+
+.compute_statistics:
+	cmpq $HASHTABLE_SIZE, %r10 # check if we reach the end of the hashTable
+	je .printResult
+	movq (%rcx, %r10, 8), %r11 # load current element to %r11
+	incq %r10 # move to the next element
+	cmpq $0, %r11 # if the currect element is null, move to the next 
+	je .compute_statistics
+
+	incq %r13 # unique_words++
+	cmpq %r14, WORDENTRY_COUNT_OFFSET(%r11) # compare current word count and best_word_count
+	ja .update_best_word
+	jmp .iterate_chain
+
+.iterate_chain:
+	movq WORDENTRY_NEXT_OFFSET(%r11), %r11 # move to the next entry in chain
+	cmpq $0, %r11 # check if we reach the end of the chain
+	je .compute_statistics
+	incq %r13 # unique_words++
+	cmpq %r14, WORDENTRY_COUNT_OFFSET(%r11) # compare current word count and best_word_count
+	ja .update_best_word
+	jmp .iterate_chain
+
+.update_best_word:
+	movq WORDENTRY_COUNT_OFFSET(%r11), %r14 # update the best_word_count counter
+	leaq WORDENTRY_WORD_OFFSET(%r11), %r15 # %r15 stores the best_word
+	jmp .iterate_chain
+
+.printResult:
+	movq $printWords, %rdi
+	movq %r12, %rsi
 	call printf
-	jmp .ending	
+	movq $printUniqueWords, %rdi
+	movq %r13, %rsi
+	call printf
+	movq $printBestWord, %rdi
+	movq %r15, %rsi
+	movq %r14, %rdx
+	call printf
+	jmp .ending
 
 .std_input:
-	movq $0, %r14
+    movq stdin(%rip), %rax
+    movq %rax, %r14   
 	jmp .init_hashtable
-
+	
 .file_not_specified:
 	movq $fileSpecify, %rdi
         call perror
@@ -106,6 +163,10 @@ main:
         jmp .ending
 
 .ending:
+	movq hashTable, %rdi
+
+	call wc_free_chain
+		popq %r15
         popq %r14
         popq %r13
         popq %r12

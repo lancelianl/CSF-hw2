@@ -464,7 +464,7 @@ wc_find_or_insert:
  movq %r12, WORDENTRY_NEXT_OFFSET(%rdi) /* next = head */
  movq %rdi, %rax /* return the modified WordEntry */
  popq %rdx /* retrieve %rdx *inserted */
- movq $1, (%rdx) /* *inserted = 1 */
+ movl $1, (%rdx) /* *inserted = 1 */
  popq %r13
  popq %r12
  addq $8, %rsp /* stack alignment */
@@ -473,7 +473,7 @@ wc_find_or_insert:
 .Lfind_or_insert_found:
  /* object found */
  popq %rdx /* retrieve %rdx *inserted */
- movq $0, (%rdx) /* *inserted = 0 */
+ movl $0, (%rdx) /* *inserted = 0 */
  movq %rdi, %rax /* return the address of the matching object */
  popq %r13
  popq %r12
