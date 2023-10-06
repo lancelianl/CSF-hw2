@@ -43,7 +43,6 @@ main:
 
 	cmpl $2, %r12d
 	jl .std_input
-	ja .file_not_specified
 	
 	movq %r13, %rdi
 	movq $readFile, %rsi
@@ -143,30 +142,42 @@ main:
 	movq %r15, %rsi
 	movq %r14, %rdx
 	call printf
-	jmp .ending
+
+.free_hashtable:
+	leaq hashTable, %r13 # %r13 as the address of the start of hashTable
+        xorq %r12, %r12
+
+.free_loop:
+	cmpq $HASHTABLE_SIZE, %r12
+	je .ending
+
+	movq (%r13, %r12, 8), %rdi
+	incq %r12
+        cmpq $0, %rdi
+	je .free_loop
+	call wc_free_chain
+	jmp .free_loop
 
 .std_input:
     movq stdin(%rip), %rax
-    movq %rax, %r14   
-	jmp .init_hashtable
-	
-.file_not_specified:
-	movq $fileSpecify, %rdi
-        call perror
-	movq $1, %rax #error code 1
-	jmp .ending
+    movq %rax, %r14
+        jmp .init_hashtable
 
 .file_cannot_open:
-	movq $fileCannotOpen, %rdi
-        call perror
-        movq $2, %rax #error code 1
-        jmp .ending
+	movq stderr(%rip), %rdi
+        movq $fileCannotOpen, %rsi
+        call fprintf
+        movq $1, %rax #error code 1
+        popq %r15
+        popq %r14
+        popq %r13
+        popq %r12
+        popq %rbp
+	ret
 
 .ending:
-	movq hashTable, %rdi
-
-	call wc_free_chain
-		popq %r15
+	xorq %rax, %rax
+	popq %r15
         popq %r14
         popq %r13
         popq %r12
